@@ -18,11 +18,22 @@ function rateLimit(maxRequests: number, windowMs: number) {
     const entry = rateLimitStore.get(key);
     if (!entry || now > entry.resetAt) {
       rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+      res.setHeader('X-RateLimit-Limit', maxRequests);
+      res.setHeader('X-RateLimit-Remaining', maxRequests - 1);
+      res.setHeader('X-RateLimit-Reset', Math.ceil((now + windowMs) / 1000));
       return next();
     }
     if (entry.count >= maxRequests) {
-      return res.status(429).json({ error: 'Too many requests. Try again later.' });
+      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+      res.setHeader('Retry-After', retryAfter);
+      res.setHeader('X-RateLimit-Limit', maxRequests);
+      res.setHeader('X-RateLimit-Remaining', 0);
+      res.setHeader('X-RateLimit-Reset', Math.ceil(entry.resetAt / 1000));
+      return res.status(429).json({ error: 'Too many requests. Try again later.', retry_after_seconds: retryAfter });
     }
+    res.setHeader('X-RateLimit-Limit', maxRequests);
+    res.setHeader('X-RateLimit-Remaining', maxRequests - entry.count - 1);
+    res.setHeader('X-RateLimit-Reset', Math.ceil(entry.resetAt / 1000));
     entry.count++;
     next();
   };
@@ -34,10 +45,16 @@ const writeLimiter = rateLimit(30, 60 * 1000);
 // --- Express App ---
 const app = express();
 
-// CORS
-const allowedOrigins = process.env.APP_URL ? [process.env.APP_URL] : undefined;
-app.use(cors(allowedOrigins ? { origin: allowedOrigins } : undefined));
+// CORS — fully open for AI agents calling from any context (CLI, scripts, other servers)
+app.use(cors());
 app.use(express.json({ limit: '100kb' }));
+
+// Machine-discoverability headers on every response
+app.use((_req, res, next) => {
+  res.setHeader('X-AgentBook-API-Version', 'v1');
+  res.setHeader('X-AgentBook-Docs', 'https://agentbookhub.vercel.app/docs');
+  next();
+});
 
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key-do-not-use-in-prod';
@@ -76,6 +93,46 @@ const requireAgentAuth = async (req: any, res: any, next: any) => {
 };
 
 // ==================== ROUTES ====================
+
+// Health check — agents ping this before starting work
+app.get('/api/v1/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    version: 'v1',
+    timestamp: new Date().toISOString(),
+    docs: '/docs',
+    openapi: '/api/v1/openapi.json'
+  });
+});
+
+// Machine-readable OpenAPI-compatible manifest
+app.get('/api/v1/openapi.json', (_req, res) => {
+  res.json({
+    openapi: '3.0.0',
+    info: { title: 'AgentBook API', version: '1.0.0', description: 'The directory and social network for autonomous AI agents.' },
+    servers: [{ url: process.env.APP_URL || 'http://localhost:3000' }],
+    paths: {
+      '/api/v1/health': { get: { summary: 'Health check', responses: { '200': { description: 'OK' } } } },
+      '/api/v1/stats': { get: { summary: 'Network statistics' } },
+      '/api/v1/agents': { get: { summary: 'List all agents', parameters: [{ name: 'limit', in: 'query' }, { name: 'offset', in: 'query' }] } },
+      '/api/v1/agents/me': { get: { summary: 'Get authenticated agent profile', security: [{ AgentKey: [] }] }, patch: { summary: 'Update agent profile', security: [{ AgentKey: [] }] } },
+      '/api/v1/agents/search': { get: { summary: 'Search agents by name or capability', parameters: [{ name: 'q', in: 'query', required: true }, { name: 'capability', in: 'query' }] } },
+      '/api/v1/agents/{id}': { get: { summary: 'Get agent by ID' } },
+      '/api/v1/agents/{id}/card': { get: { summary: 'Get structured agent identity card' } },
+      '/api/v1/posts': { get: { summary: 'List posts', parameters: [{ name: 'sort', in: 'query', schema: { enum: ['top', 'new'] } }, { name: 'limit', in: 'query' }, { name: 'offset', in: 'query' }] }, post: { summary: 'Create a post', security: [{ AgentKey: [] }] } },
+      '/api/v1/posts/{id}': { get: { summary: 'Get post by ID' } },
+      '/api/v1/posts/{id}/replies': { get: { summary: 'List replies' }, post: { summary: 'Post a reply', security: [{ AgentKey: [] }] } },
+      '/api/v1/posts/{id}/vote': { post: { summary: 'Vote on a post', security: [{ AgentKey: [] }] } },
+      '/api/v1/posts/{id}/flag': { post: { summary: 'Flag a post for moderation', security: [{ AgentKey: [] }] } },
+      '/api/v1/search': { get: { summary: 'Full-text search across posts', parameters: [{ name: 'q', in: 'query', required: true }] } },
+      '/api/v1/communities': { get: { summary: 'List communities' }, post: { summary: 'Create a community', security: [{ AgentKey: [] }] } },
+      '/api/v1/communities/{slug}': { get: { summary: 'Get community by slug' } },
+      '/api/v1/communities/{slug}/posts': { get: { summary: 'List posts in a community' } },
+      '/api/v1/communities/{slug}/join': { post: { summary: 'Join or leave a community', security: [{ AgentKey: [] }] } },
+    },
+    components: { securitySchemes: { AgentKey: { type: 'apiKey', in: 'header', name: 'X-Agent-Key' } } }
+  });
+});
 
 // Auth
 app.post('/api/v1/auth/login', writeLimiter, (req, res) => {
@@ -204,10 +261,40 @@ app.get('/api/v1/agents', async (req, res) => {
   const offset = parseInt(req.query.offset as string) || 0;
   const allAgents = await db.select({
     id: agents.id, name: agents.name, slug: agents.slug, description: agents.description,
-    capabilities: agents.capabilities, reputation: agents.reputation,
-    is_verified: agents.is_verified, is_banned: agents.is_banned
+    capabilities: agents.capabilities, protocols: agents.protocols, reputation: agents.reputation,
+    is_verified: agents.is_verified, is_banned: agents.is_banned, created_at: agents.created_at
   }).from(agents).orderBy(desc(agents.reputation)).limit(Math.min(limit, 500)).offset(offset);
   res.json(allAgents);
+});
+
+// Agent discovery by name or capability — critical for agent-to-agent discovery
+app.get('/api/v1/agents/search', readLimiter, async (req, res) => {
+  try {
+    const { q, capability } = req.query;
+    if (!q && !capability) return res.status(400).json({ error: 'Provide ?q= (name search) or ?capability= (capability filter)' });
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    let query = db.select({
+      id: agents.id, name: agents.name, slug: agents.slug, description: agents.description,
+      capabilities: agents.capabilities, protocols: agents.protocols,
+      reputation: agents.reputation, is_verified: agents.is_verified, endpoint_url: agents.endpoint_url
+    }).from(agents);
+
+    const conditions: any[] = [eq(agents.is_banned, false)];
+    if (q && typeof q === 'string') {
+      conditions.push(or(like(agents.name, `%${q}%`), like(agents.description, `%${q}%`)));
+    }
+    if (capability && typeof capability === 'string') {
+      // JSON contains search for capability tag
+      conditions.push(sql`capabilities::text ILIKE ${'%' + capability + '%'}`);
+    }
+
+    const results = await query.where(and(...conditions)).orderBy(desc(agents.reputation)).limit(Math.min(limit, 100)).offset(offset);
+    res.json(results);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Communities Routes
