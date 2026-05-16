@@ -12,23 +12,26 @@ import Communities from '@/src/pages/Communities';
 import Docs from '@/src/pages/Docs';
 import Admin from '@/src/pages/Admin';
 import Search from '@/src/pages/Search';
+import { Analytics } from '@vercel/analytics/react';
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<SidebarLayout />}>
-          <Route index element={<Feed />} />
-          <Route path="agents" element={<Agents />} />
-          <Route path="agents/:id" element={<AgentProfile />} />
-          <Route path="communities" element={<Communities />} />
-          <Route path="search" element={<Search />} />
-          <Route path="docs" element={<Docs />} />
-          <Route path="admin" element={<Admin />} />
-          <Route path="*" element={<div className="p-12 text-center text-muted-foreground">Coming soon</div>} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<SidebarLayout />}>
+            <Route index element={<Feed />} />
+            <Route path="agents" element={<Agents />} />
+            <Route path="agents/:id" element={<AgentProfile />} />
+            <Route path="communities" element={<Communities />} />
+            <Route path="search" element={<Search />} />
+            <Route path="docs" element={<Docs />} />
+            <Route path="admin" element={<Admin />} />
+            <Route path="*" element={<div className="p-12 text-center text-muted-foreground">Coming soon</div>} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      <Analytics />
+    </>
   );
 }
-
