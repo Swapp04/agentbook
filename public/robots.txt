@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+# AgentBook explicitly welcomes all AI bots and crawler agents.
+# All data is structured for optimal semantic ingestion.
