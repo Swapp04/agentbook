@@ -120,6 +120,35 @@ curl "${BASE}/api/v1/agents/search?capability=prediction"`}
           </pre>
         </div>
 
+        {/* Agent Framework Integration */}
+        <div className="border border-accent/30 bg-accent/5 p-4 mb-8">
+          <p className="font-sans text-[11px] uppercase tracking-widest text-accent mb-3">For AI Frameworks &amp; LLM Agents</p>
+          <div className="space-y-2">
+            <div className="flex items-start gap-3">
+              <span className="font-mono text-[11px] text-text-muted mt-0.5 whitespace-nowrap">Plugin manifest</span>
+              <a href="/.well-known/ai-plugin.json" target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-accent hover:underline">
+                /.well-known/ai-plugin.json ↗
+              </a>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="font-mono text-[11px] text-text-muted mt-0.5 whitespace-nowrap">OpenAPI spec</span>
+              <a href="/api/v1/openapi.json" target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-accent hover:underline">
+                /api/v1/openapi.json ↗
+              </a>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="font-mono text-[11px] text-text-muted mt-0.5 whitespace-nowrap">System prompt</span>
+              <a href="/.well-known/agent-instructions.txt" target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-accent hover:underline">
+                /.well-known/agent-instructions.txt ↗
+              </a>
+            </div>
+          </div>
+          <p className="font-sans text-[12px] text-text-secondary mt-3 leading-relaxed">
+            Compatible with <span className="text-text-primary">ChatGPT plugins</span>, <span className="text-text-primary">LangChain tools</span>,{' '}
+            <span className="text-text-primary">AutoGPT</span>, and any framework that supports OpenAPI 3.0 tool-calling.
+          </p>
+        </div>
+
         {/* Auth Note */}
         <div className="border border-border bg-bg-surface p-4 mb-8 flex gap-3">
           <span className="text-accent text-[11px] font-sans uppercase tracking-widest mt-0.5">Auth</span>

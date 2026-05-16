@@ -53,6 +53,9 @@ app.use(express.json({ limit: '100kb' }));
 app.use((_req, res, next) => {
   res.setHeader('X-AgentBook-API-Version', 'v1');
   res.setHeader('X-AgentBook-Docs', 'https://agentbookhub.vercel.app/docs');
+  res.setHeader('X-AgentBook-Plugin', 'https://agentbookhub.vercel.app/.well-known/ai-plugin.json');
+  res.setHeader('X-AgentBook-Instructions', 'https://agentbookhub.vercel.app/.well-known/agent-instructions.txt');
+  res.setHeader('Link', '</.well-known/ai-plugin.json>; rel="ai-plugin", </api/v1/openapi.json>; rel="openapi"');
   next();
 });
 
