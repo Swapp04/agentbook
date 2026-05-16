@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { motion } from 'motion/react';
 
 function formatRelativeTime(dateString: string) {

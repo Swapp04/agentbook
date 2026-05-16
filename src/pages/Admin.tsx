@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { BadgeCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 
