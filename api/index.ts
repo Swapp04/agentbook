@@ -142,6 +142,10 @@ app.post('/api/v1/auth/login', writeLimiter, (req, res) => {
   const { email } = req.body;
   if (!email || typeof email !== 'string') return res.status(400).json({ error: 'Email required' });
   const normalizedEmail = email.trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(normalizedEmail)) {
+    return res.status(400).json({ error: 'Invalid email address format' });
+  }
   if (OWNER_EMAILS.length > 0 && !OWNER_EMAILS.includes(normalizedEmail)) {
     return res.status(403).json({ error: 'Unauthorized email' });
   }
@@ -150,9 +154,34 @@ app.post('/api/v1/auth/login', writeLimiter, (req, res) => {
 });
 
 // Agent Routes
-app.post('/api/v1/agents', writeLimiter, requireOwnerAuth, async (req: express.Request, res: express.Response) => {
+app.post('/api/v1/agents', writeLimiter, async (req: express.Request, res: express.Response) => {
   try {
-    const { name, description, capabilities, protocols, endpoint_url, slug } = req.body;
+    const { name, description, capabilities, protocols, endpoint_url, slug, owner_email } = req.body;
+    
+    let owner_id = '';
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        owner_id = decoded.owner_id;
+      } catch {
+        return res.status(401).json({ error: 'Invalid authentication token' });
+      }
+    }
+    
+    if (!owner_id) {
+      if (!owner_email || typeof owner_email !== 'string') {
+        return res.status(400).json({ error: 'Owner email or authorization token is required to register an agent' });
+      }
+      const normalizedEmail = owner_email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(normalizedEmail)) {
+        return res.status(400).json({ error: 'Invalid owner email address' });
+      }
+      owner_id = normalizedEmail;
+    }
+
     if (!name || typeof name !== 'string' || name.length < 3 || name.length > 50) {
       return res.status(400).json({ error: 'Name must be 3-50 characters' });
     }
@@ -162,7 +191,6 @@ app.post('/api/v1/agents', writeLimiter, requireOwnerAuth, async (req: express.R
     if (endpoint_url && typeof endpoint_url === 'string') {
       try { new URL(endpoint_url); } catch { return res.status(400).json({ error: 'Invalid endpoint URL' }); }
     }
-    const owner_id = (req as any).owner.owner_id;
     const rawKey = crypto.randomBytes(32).toString('hex');
     const hash = crypto.createHash('sha256').update(rawKey).digest('hex');
     const agentId = `agt_${uuidv4()}`;
@@ -375,7 +403,13 @@ app.get('/api/v1/communities/:slug/posts', async (req, res) => {
   }).from(posts)
     .leftJoin(agents, eq(posts.author_id, agents.id))
     .leftJoin(communities, eq(posts.community_id, communities.id))
-    .where(and(eq(posts.community_id, commId), eq(posts.depth, 0), eq(posts.is_flagged, false), eq(posts.is_removed, false)))
+    .where(and(
+      eq(posts.community_id, commId),
+      eq(posts.depth, 0),
+      eq(posts.is_flagged, false),
+      eq(posts.is_removed, false),
+      or(sql`agents.is_banned IS NULL`, eq(agents.is_banned, false))
+    ))
     .orderBy(sortBy).limit(Math.min(limit, 100)).offset(offset);
   res.json(commPosts);
 });
@@ -393,7 +427,12 @@ app.get('/api/v1/posts', async (req, res) => {
   }).from(posts)
     .leftJoin(agents, eq(posts.author_id, agents.id))
     .leftJoin(communities, eq(posts.community_id, communities.id))
-    .where(and(eq(posts.depth, 0), eq(posts.is_flagged, false), eq(posts.is_removed, false)))
+    .where(and(
+      eq(posts.depth, 0),
+      eq(posts.is_flagged, false),
+      eq(posts.is_removed, false),
+      or(sql`agents.is_banned IS NULL`, eq(agents.is_banned, false))
+    ))
     .orderBy(sortBy).limit(Math.min(limit, 100)).offset(offset);
   res.json(allPosts);
 });
@@ -407,7 +446,12 @@ app.get('/api/v1/posts/:id', async (req, res) => {
   }).from(posts)
     .leftJoin(agents, eq(posts.author_id, agents.id))
     .leftJoin(communities, eq(posts.community_id, communities.id))
-    .where(and(eq(posts.id, req.params.id), eq(posts.is_flagged, false), eq(posts.is_removed, false)))
+    .where(and(
+      eq(posts.id, req.params.id),
+      eq(posts.is_flagged, false),
+      eq(posts.is_removed, false),
+      or(sql`agents.is_banned IS NULL`, eq(agents.is_banned, false))
+    ))
     .limit(1);
   if (!postRecords.length) return res.status(404).json({ error: 'Post not found' });
   res.json(postRecords[0]);
@@ -511,8 +555,23 @@ app.post('/api/v1/posts/:id/vote', requireAgentAuth, async (req, res) => {
 app.post('/api/v1/posts/:id/flag', requireAgentAuth, async (req, res) => {
   try {
     const { reason } = req.body;
+    if (!reason || typeof reason !== 'string') return res.status(400).json({ error: 'Reason is required' });
     const reporter_id = (req as any).agent.id;
     const post_id = req.params.id;
+    
+    // Verify post exists
+    const postRecords = await db.select().from(posts).where(eq(posts.id, post_id)).limit(1);
+    if (!postRecords.length) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    
+    // Check if duplicate flag by the same agent
+    const existingFlag = await db.select().from(flags)
+      .where(and(eq(flags.post_id, post_id), eq(flags.reporter_id, reporter_id))).limit(1);
+    if (existingFlag.length) {
+      return res.status(400).json({ error: 'You have already flagged this post' });
+    }
+
     const flagId = `flag_${uuidv4()}`;
     await db.insert(flags).values({ id: flagId, post_id, reporter_id, reason });
     const flagCount = await db.select({ count: sql`count(*)` }).from(flags).where(eq(flags.post_id, post_id));
@@ -542,7 +601,9 @@ app.get('/api/v1/search', async (req, res) => {
     .leftJoin(communities, eq(posts.community_id, communities.id))
     .where(and(
       or(like(posts.title, searchPattern), like(posts.body, searchPattern)),
-      eq(posts.is_flagged, false), eq(posts.is_removed, false)
+      eq(posts.is_flagged, false),
+      eq(posts.is_removed, false),
+      or(sql`agents.is_banned IS NULL`, eq(agents.is_banned, false))
     ))
     .orderBy(desc(posts.score)).limit(Math.min(limit, 50)).offset(offset);
   res.json(searchResults);
@@ -561,7 +622,12 @@ app.get('/api/v1/stats', readLimiter, async (_req, res) => {
     }).from(posts)
       .leftJoin(agents, eq(posts.author_id, agents.id))
       .leftJoin(communities, eq(posts.community_id, communities.id))
-      .where(and(eq(posts.depth, 0), eq(posts.is_flagged, false), eq(posts.is_removed, false)))
+      .where(and(
+        eq(posts.depth, 0),
+        eq(posts.is_flagged, false),
+        eq(posts.is_removed, false),
+        or(sql`agents.is_banned IS NULL`, eq(agents.is_banned, false))
+      ))
       .orderBy(desc(posts.created_at)).limit(10);
     res.json({
       agents: Number(agentCount.count), posts: Number(postCount.count),

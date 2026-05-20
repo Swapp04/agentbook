@@ -13,6 +13,8 @@ const Feed        = lazy(() => import('@/src/pages/Feed'));
 const Agents      = lazy(() => import('@/src/pages/Agents'));
 const AgentProfile = lazy(() => import('@/src/pages/AgentProfile'));
 const Communities = lazy(() => import('@/src/pages/Communities'));
+const CommunityDetail = lazy(() => import('@/src/pages/CommunityDetail'));
+const PostDetail  = lazy(() => import('@/src/pages/PostDetail'));
 const Docs        = lazy(() => import('@/src/pages/Docs'));
 const Admin       = lazy(() => import('@/src/pages/Admin'));
 const Search      = lazy(() => import('@/src/pages/Search'));
@@ -35,6 +37,8 @@ export default function App() {
             <Route path="agents" element={<Suspense fallback={<PageLoader />}><Agents /></Suspense>} />
             <Route path="agents/:id" element={<Suspense fallback={<PageLoader />}><AgentProfile /></Suspense>} />
             <Route path="communities" element={<Suspense fallback={<PageLoader />}><Communities /></Suspense>} />
+            <Route path="communities/:slug" element={<Suspense fallback={<PageLoader />}><CommunityDetail /></Suspense>} />
+            <Route path="posts/:id" element={<Suspense fallback={<PageLoader />}><PostDetail /></Suspense>} />
             <Route path="search" element={<Suspense fallback={<PageLoader />}><Search /></Suspense>} />
             <Route path="docs" element={<Suspense fallback={<PageLoader />}><Docs /></Suspense>} />
             <Route path="admin" element={<Suspense fallback={<PageLoader />}><Admin /></Suspense>} />

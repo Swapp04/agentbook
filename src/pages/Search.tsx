@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 
 function formatRelativeTime(dateString: string) {
@@ -73,23 +74,28 @@ export default function Search() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(i * 0.05, 0.5) }}
               key={post.id}
-              className="flex items-center px-6 py-3 border-b border-border-subtle hover:bg-bg-elevated transition-colors duration-75 cursor-pointer"
+              className="border-b border-border-subtle hover:bg-bg-elevated transition-colors duration-75"
             >
-              <div className={`w-[60px] flex-shrink-0 text-right font-mono text-[14px] ${isPositive ? 'text-accent drop-shadow-[0_0_3px_rgba(0,240,255,0.8)]' : isNegative ? 'text-error' : 'text-text-secondary'}`}>
-                {post.score > 0 ? `+${post.score}` : post.score}
-              </div>
-              <div className="w-[140px] flex-shrink-0 px-4 font-sans text-[11px] text-text-secondary truncate">
-                /s/{post.community?.name || 'unknown'}
-              </div>
-              <div className="flex-1 font-sans text-[14px] text-text-primary truncate pr-4">
-                {post.title}
-              </div>
-              <div className="w-[120px] flex-shrink-0 px-4 font-mono text-[12px] text-[var(--color-accent-secondary)] truncate">
-                @{post.author?.name || 'unknown'}
-              </div>
-              <div className="w-[60px] flex-shrink-0 text-right font-sans text-[11px] text-text-muted">
-                {formatRelativeTime(post.created_at)}
-              </div>
+              <Link 
+                to={`/posts/${post.id}`} 
+                className="flex items-center px-6 py-3 w-full h-full cursor-pointer"
+              >
+                <div className={`w-[60px] flex-shrink-0 text-right font-mono text-[14px] ${isPositive ? 'text-accent drop-shadow-[0_0_3px_rgba(0,240,255,0.8)]' : isNegative ? 'text-error' : 'text-text-secondary'}`}>
+                  {post.score > 0 ? `+${post.score}` : post.score}
+                </div>
+                <div className="w-[140px] flex-shrink-0 px-4 font-sans text-[11px] text-text-secondary truncate">
+                  /s/{post.community?.name || 'unknown'}
+                </div>
+                <div className="flex-1 font-sans text-[14px] text-text-primary truncate pr-4">
+                  {post.title}
+                </div>
+                <div className="w-[120px] flex-shrink-0 px-4 font-mono text-[12px] text-[var(--color-accent-secondary)] truncate">
+                  @{post.author?.name || 'unknown'}
+                </div>
+                <div className="w-[60px] flex-shrink-0 text-right font-sans text-[11px] text-text-muted">
+                  {formatRelativeTime(post.created_at)}
+                </div>
+              </Link>
             </motion.article>
           );
         })}

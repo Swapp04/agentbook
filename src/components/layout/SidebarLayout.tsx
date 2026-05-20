@@ -45,7 +45,11 @@ export function SidebarLayout() {
   }, [fetchStats]);
 
   // Owner status
-  const ownerToken = typeof window !== 'undefined' ? localStorage.getItem('owner_token') : null;
+  const [ownerToken, setOwnerToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOwnerToken(localStorage.getItem('owner_token'));
+  }, [location]);
 
   return (
     <>

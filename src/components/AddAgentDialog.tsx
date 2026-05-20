@@ -8,6 +8,7 @@ interface AddAgentDialogProps {
 
 export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDialogProps) {
   const [name, setName] = useState('');
+  const [ownerEmail, setOwnerEmail] = useState('');
   const [description, setDescription] = useState('');
   const [capabilities, setCapabilities] = useState('');
   const [protocols, setProtocols] = useState('');
@@ -16,9 +17,18 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
   const [error, setError] = useState<string | null>(null);
   const [rawKey, setRawKey] = useState<string | null>(null);
 
+  const hasOwnerToken = !!localStorage.getItem('owner_token');
+
   const resetForm = () => {
-    setName(''); setDescription(''); setCapabilities(''); setProtocols('');
-    setEndpointUrl(''); setError(null); setRawKey(null); setLoading(false);
+    setName('');
+    setOwnerEmail('');
+    setDescription('');
+    setCapabilities('');
+    setProtocols('');
+    setEndpointUrl('');
+    setError(null);
+    setRawKey(null);
+    setLoading(false);
   };
 
   const handleClose = () => {
@@ -44,12 +54,26 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
     }
   };
 
+  const isValidEmail = (emailStr: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     if (name.length < 3) {
       setError('Name must be at least 3 characters.');
       return;
+    }
+    if (!hasOwnerToken) {
+      if (!ownerEmail.trim()) {
+        setError('Owner email is required for public agent registration.');
+        return;
+      }
+      if (!isValidEmail(ownerEmail)) {
+        setError('Invalid owner email address.');
+        return;
+      }
     }
     if (!description) {
       setError('Description is required.');
@@ -73,19 +97,31 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
       const capsArray = capabilities.split(',').map(s => s.trim()).filter(Boolean);
       const protosArray = protocols.split(',').map(s => s.trim()).filter(Boolean);
 
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      
+      const ownerToken = localStorage.getItem('owner_token');
+      if (ownerToken) {
+        headers['Authorization'] = `Bearer ${ownerToken}`;
+      }
+
+      const bodyData: Record<string, any> = {
+        name,
+        description,
+        capabilities: capsArray.length > 0 ? capsArray : ['general'],
+        protocols: protosArray.length > 0 ? protosArray : ['rest'],
+        endpoint_url: endpointUrl.trim() || undefined
+      };
+
+      if (!ownerToken) {
+        bodyData.owner_email = ownerEmail.trim();
+      }
+
       const res = await fetch('/api/v1/agents', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('owner_token') || 'demo'}`
-        },
-        body: JSON.stringify({
-          name,
-          description,
-          capabilities: capsArray.length > 0 ? capsArray : ['general'],
-          protocols: protosArray.length > 0 ? protosArray : ['rest'],
-          endpoint_url: endpointUrl.trim() || undefined,
-        }),
+        headers,
+        body: JSON.stringify(bodyData),
       });
 
       const data = await res.json();
@@ -107,7 +143,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
       <div className="bg-bg-surface border border-border w-full max-w-md p-6 relative" role="dialog" aria-modal="true">
         <button 
           onClick={handleClose}
-          className="absolute top-4 right-4 text-text-muted hover:text-text-primary transition-colors font-sans text-[11px] uppercase tracking-widest"
+          className="absolute top-4 right-4 text-text-muted hover:text-text-primary transition-colors font-sans text-[11px] uppercase tracking-widest cursor-pointer"
           aria-label="Close"
         >
           Close
@@ -125,8 +161,9 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
               </pre>
             </div>
             <div className="flex justify-end mt-6">
-               <button                  onClick={handleClose}
-                 className="px-4 py-2 bg-text-secondary text-bg-base hover:bg-text-primary font-sans text-[11px] uppercase tracking-widest transition-colors duration-75"
+               <button 
+                 onClick={handleClose}
+                 className="px-4 py-2 bg-text-secondary text-bg-base hover:bg-text-primary font-sans text-[11px] uppercase tracking-widest transition-colors duration-75 cursor-pointer"
                >
                  Done
                </button>
@@ -152,6 +189,20 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
                 placeholder="e.g. tradebot_x"
               />
             </div>
+
+            {!hasOwnerToken && (
+              <div className="space-y-1">
+                <label className="font-sans text-[11px] uppercase tracking-widest text-text-secondary">Owner Email</label>
+                <input 
+                  type="email" 
+                  value={ownerEmail}
+                  onChange={e => setOwnerEmail(e.target.value)}
+                  className="w-full bg-bg-base border border-border focus:border-accent text-text-primary px-3 py-2 font-mono text-[13px] outline-none transition-colors"
+                  placeholder="e.g. developer@example.com"
+                  required
+                />
+              </div>
+            )}
             
             <div className="space-y-1">
               <label className="font-sans text-[11px] uppercase tracking-widest text-text-secondary">Description</label>
@@ -200,14 +251,14 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
               <button 
                 type="button"
                 onClick={handleClose}
-                className="px-4 py-2 text-text-secondary hover:text-text-primary font-sans text-[11px] uppercase tracking-widest border border-transparent hover:border-border mr-2 transition-colors duration-75"
+                className="px-4 py-2 text-text-secondary hover:text-text-primary font-sans text-[11px] uppercase tracking-widest border border-transparent hover:border-border mr-2 transition-colors duration-75 cursor-pointer"
               >
                 Cancel
               </button>
               <button 
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2 bg-accent text-bg-base hover:bg-white font-sans text-[11px] uppercase tracking-widest transition-colors duration-75 disabled:opacity-50"
+                className="px-4 py-2 bg-accent text-bg-base hover:bg-white font-sans text-[11px] uppercase tracking-widest transition-colors duration-75 disabled:opacity-50 cursor-pointer"
               >
                 {loading ? 'Registering...' : 'Register Agent'}
               </button>
